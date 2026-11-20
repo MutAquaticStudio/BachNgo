@@ -1,50 +1,36 @@
 {
-  "name": "@bachngo/gsap-kit",
-  "version": "0.1.0",
-  "description": "GSAP motion kit for the Bách Ngộ storefronts: hero frame, weave transition, shared-element, marquee, parallax, product card, provenance thread, cart drawer.",
-  "type": "module",
-  "main": "src/index.js",
-  "module": "src/index.js",
-  "types": "types/index.d.ts",
-  "sideEffects": false,
-  "exports": {
-    ".": {
-      "types": "./types/index.d.ts",
-      "import": "./src/index.js"
-    },
-    "./react": {
-      "types": "./types/react/index.d.ts",
-      "import": "./src/react/index.js"
-    }
-  },
-  "files": [
-    "src",
-    "types",
-    "README.md"
-  ],
+  "name": "claude-desk",
+  "productName": "Claude Desk",
+  "version": "0.2.0",
+  "description": "App desktop chat với Claude bằng API key, chạy task tự động theo lịch",
+  "main": "src/main.js",
+  "private": true,
   "scripts": {
-    "build": "node build.mjs",
-    "types": "tsc -p tsconfig.json",
-    "test": "node build.mjs && node test/smoke.mjs && node storefront/build.mjs && node test/storefront.mjs",
-    "build:store": "node storefront/build.mjs",
-    "test:store": "node storefront/build.mjs && node test/storefront.mjs"
+    "start": "electron .",
+    "test": "node test/smoke.mjs",
+    "dist:win": "electron-builder --win zip --x64",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:linux": "electron-builder --linux AppImage"
   },
-  "peerDependencies": {
-    "gsap": "^3.15.1",
-    "lenis": "^1.3.27",
-    "react": ">=18"
-  },
-  "peerDependenciesMeta": {
-    "lenis": {
-      "optional": true
+  "build": {
+    "appId": "studio.mutaquatic.claudedesk",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false
     },
-    "react": {
-      "optional": true
+    "directories": {
+      "output": "dist"
     }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.11.0",
+    "node-cron": "^4.6.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2",
-    "three": "^0.128.0",
-    "typescript": "^7.0.2"
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
   }
 }
