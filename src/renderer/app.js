@@ -302,12 +302,29 @@ desk.on('task:event', async () => {
 });
 
 // ---------- LỊCH SỬ claude.ai ----------
-function renderHistList() {
+let autos = [];
+let currentAuto = null;
+
+async function renderHistList() {
+  autos = await desk.listAutomations();
   const q = $('#histSearch').value.trim().toLowerCase();
+  const match = (title, text) => !q || title.toLowerCase().includes(q) || String(text).toLowerCase().includes(q);
+
+  const au = $('#autoList');
+  au.innerHTML = '';
+  const shownAutos = autos.filter((a) => match(a.title, a.prompt));
+  $('#autoLabel').hidden = !autos.length;
+  for (const a of shownAutos.slice(0, 200)) {
+    const li = document.createElement('li');
+    li.className = a.id === currentAuto ? 'active' : '';
+    li.innerHTML = `${esc(a.title)}<small>${a.kind === 'repeated' ? `Chạy ${a.count} lần · gần nhất ${fmtTime(a.runs[0])}` : 'Gợi ý: có nhắc tới lịch / tự động'}</small>`;
+    li.onclick = () => openAuto(a.id);
+    au.appendChild(li);
+  }
+
   const ul = $('#histList');
   ul.innerHTML = '';
-  const list = S.imported.filter((c) => !q || c.title.toLowerCase().includes(q) || c.preview.toLowerCase().includes(q));
-  for (const c of list.slice(0, 500)) {
+  for (const c of S.imported.filter((c) => match(c.title, c.preview)).slice(0, 500)) {
     const li = document.createElement('li');
     li.className = c.id === currentHist ? 'active' : '';
     li.innerHTML = `${esc(c.title)}<small>${fmtTime(c.updatedAt)} · ${c.count} tin</small>`;
@@ -317,12 +334,19 @@ function renderHistList() {
   if (!S.imported.length) ul.innerHTML = '<li class="muted">Chưa nhập gì.</li>';
 }
 
+function showHistPane(which) {
+  $('#histEmpty').hidden = which !== 'empty';
+  $('#histDetail').hidden = which !== 'conv';
+  $('#autoDetail').hidden = which !== 'auto';
+}
+
 async function openHist(id) {
   currentHist = id;
+  currentAuto = null;
   const conv = await desk.continueImported(id);
-  $('#histEmpty').hidden = true;
-  $('#histDetail').hidden = false;
+  showHistPane('conv');
   $('#histTitle').textContent = conv.title;
+  $('#histAnalysis').innerHTML = '';
   const box = $('#histMessages');
   box.innerHTML = '';
   for (const m of conv.messages) addMsg(box, m.role, m.text, fmtTime(m.at));
@@ -333,7 +357,107 @@ async function openHist(id) {
     $('#contextNote').hidden = false;
     $('#contextNote').textContent = `Tin nhắn đầu tiên sẽ kèm toàn bộ hội thoại cũ “${conv.title}” làm ngữ cảnh.`;
   };
+  $('#histFindAuto').onclick = () => analyze('conv-' + id, $('#histAnalysis'), $('#histFindAuto'));
   renderHistList();
+}
+
+function openAuto(id) {
+  currentAuto = id;
+  currentHist = null;
+  const a = autos.find((x) => x.id === id);
+  if (!a) return;
+  showHistPane('auto');
+  $('#autoTitle').textContent = a.title;
+  $('#autoMeta').textContent = a.kind === 'repeated'
+    ? `${a.count} hội thoại có cùng tin nhắn đầu, nhiều khả năng là task chạy theo lịch. Lần gần nhất: ${fmtTime(a.runs[0])}.`
+    : 'Hội thoại có nhắc tới lịch hoặc tự động. Có thể chứa yêu cầu automation.';
+  $('#autoPrompt').value = a.prompt;
+  $('#autoRuns').innerHTML = a.runs.slice(0, 100).map((r) => `<li>${esc(fmtTime(r))}</li>`).join('');
+  $('#autoAnalysis').innerHTML = '';
+  $('#autoMsg').textContent = '';
+  $('#autoAnalyze').onclick = () => analyze(id, $('#autoAnalysis'), $('#autoAnalyze'));
+  $('#autoRaw').onclick = () => renderProposals($('#autoAnalysis'), {
+    summary: 'Tạo task với prompt cũ, chưa qua phân tích. Hãy tự đặt lịch và kiểm tra prompt: nếu prompt cũ dùng connector (Gmail, Upwork, Drive…), task sẽ không có dữ liệu đó.',
+    tasks: [{ name: a.title, cron: '', prompt: a.prompt, format: 'text', telegram: S.hasTelegram, feasible: true, missing: '', notes: '' }],
+  });
+  renderHistList();
+}
+
+async function analyze(autoId, target, btn) {
+  if (!S.hasKey) {
+    alert('Chưa có API key. Vào Cài đặt để thêm.');
+    return show('settings');
+  }
+  btn.disabled = true;
+  target.innerHTML = '<p class="muted typing">Claude đang đọc lịch sử và đề xuất task</p>';
+  const res = await desk.analyzeAutomation(autoId);
+  btn.disabled = false;
+  if (!res.ok) {
+    target.innerHTML = `<p class="bad">${esc(res.error)}</p>`;
+    return;
+  }
+  renderProposals(target, res);
+}
+
+function renderProposals(target, res) {
+  target.innerHTML = `<div class="summary">${esc(res.summary || '')}</div>`;
+  if (!res.tasks.length) {
+    target.innerHTML += '<p class="muted">Không tìm thấy automation nào để tạo task.</p>';
+    return;
+  }
+  res.tasks.forEach((t) => {
+    const card = document.createElement('div');
+    card.className = 'proposal' + (t.feasible ? '' : ' warn');
+    card.innerHTML = `
+      ${t.feasible ? '' : `<div class="warning"><b>Chưa chạy lại đầy đủ được:</b> ${esc(t.missing || 'task cũ cần công cụ mà Claude Desk chưa có.')}</div>`}
+      ${t.feasible && t.missing ? `<div class="warning">${esc(t.missing)}</div>` : ''}
+      <label>Tên task<input data-f="name"></label>
+      <label>Lịch (cron)<input data-f="cron" placeholder="để trống = chỉ chạy tay"></label>
+      <label>Prompt<textarea data-f="prompt" rows="7"></textarea></label>
+      ${t.notes ? `<p class="muted">${esc(t.notes)}</p>` : ''}
+      ${t.cronInvalid ? '<p class="bad">Lịch Claude đề xuất không hợp lệ nên đã để trống.</p>' : ''}
+      <label class="check-inline"><input type="checkbox" data-f="telegram"> Gửi kết quả qua Telegram</label>
+      <div class="form-actions">
+        <button class="primary" data-act="add">Thêm task</button>
+        <button class="ghost" data-act="run">Thêm và chạy ngay</button>
+        <span class="muted" data-msg></span>
+      </div>`;
+    card.querySelector('[data-f=name]').value = t.name;
+    card.querySelector('[data-f=cron]').value = t.cron || '';
+    card.querySelector('[data-f=prompt]').value = t.prompt;
+    card.querySelector('[data-f=telegram]').checked = Boolean(t.telegram && S.hasTelegram);
+    const msg = card.querySelector('[data-msg]');
+    const save = async (runNow) => {
+      try {
+        const saved = await desk.saveTask({
+          name: card.querySelector('[data-f=name]').value.trim() || 'Task',
+          cron: card.querySelector('[data-f=cron]').value.trim(),
+          enabled: true,
+          prompt: card.querySelector('[data-f=prompt]').value,
+          format: t.format || 'text',
+          model: '',
+          telegram: card.querySelector('[data-f=telegram]').checked,
+          webhookUrl: '',
+          source: 'claude.ai',
+        });
+        card.querySelectorAll('button').forEach((b) => (b.disabled = true));
+        await refresh();
+        if (!runNow) {
+          flash(msg, 'Đã thêm vào Task tự động.', 'ok');
+          return;
+        }
+        flash(msg, 'Đã thêm, đang chạy…');
+        const run = await desk.runTask(saved.id);
+        await refresh();
+        flash(msg, run.status === 'ok' ? 'Chạy xong. Xem kết quả trong Task tự động.' : `Lỗi: ${run.error}`, run.status === 'ok' ? 'ok' : 'bad');
+      } catch (err) {
+        flash(msg, String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'bad');
+      }
+    };
+    card.querySelector('[data-act=add]').onclick = () => save(false);
+    card.querySelector('[data-act=run]').onclick = () => save(true);
+    target.appendChild(card);
+  });
 }
 
 $('#histSearch').oninput = renderHistList;
@@ -342,13 +466,14 @@ $('#importBtn').onclick = async () => {
   if (res.canceled) return;
   if (!res.ok) return alert(`Không nhập được: ${res.error}`);
   await refresh();
-  renderHistList();
-  alert(`Đã nhập ${res.count} hội thoại.`);
+  await renderHistList();
+  alert(`Đã nhập ${res.count} hội thoại. Phát hiện ${autos.filter((a) => a.kind === 'repeated').length} automation chạy lặp lại.`);
 };
 $('#histClear').onclick = async () => {
   if (!confirm('Xoá toàn bộ lịch sử đã nhập trên máy này?')) return;
   await desk.clearImported();
   await refresh();
+  showHistPane('empty');
   renderHistList();
 };
 

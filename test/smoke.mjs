@@ -37,7 +37,8 @@ const server = http.createServer((req, res) => {
     const json = JSON.parse(body);
     requests.push({ url: req.url, headers: req.headers, body: json });
     const last = json.messages[json.messages.length - 1].content;
-    const reply = String(last).includes('JSON')
+    const proposal = { summary: 'Task đăng bài mỗi sáng 8h.', tasks: [{ name: 'Đăng bài buổi sáng', cron: '0 8 * * *', prompt: 'Viết bài đăng cho shop túi. Bài trước: {{last}}', format: 'text', telegram: false, feasible: true, missing: '', notes: 'Các lần chạy đều lúc 8:00.' }] };
+    const reply = json.output_config?.format ? JSON.stringify(proposal) : String(last).includes('JSON')
       ? '```json\n{"ten":"Túi tote","gia":139000}\n```'
       : `Xin chào! Bạn vừa nói: ${String(last).slice(-40)}`;
     if (!json.stream) {
@@ -87,6 +88,11 @@ fs.writeFileSync(zipPath, makeZip('data-2026/conversations.json', JSON.stringify
       { sender: 'assistant', text: '', content: [{ type: 'text', text: 'Đăng 3 bài/tuần: thứ 2, 4, 6 lúc 8h.' }], created_at: '2026-11-01T08:00:05Z' },
     ] },
   { uuid: 'c2', name: 'Trống', chat_messages: [] },
+  ...[18, 19, 20].map((d) => ({ uuid: `run-${d}`, name: 'Đăng bài sáng', created_at: `2026-11-${d}T01:00:12Z`, updated_at: `2026-11-${d}T01:01:00Z`,
+    chat_messages: [
+      { sender: 'human', text: 'Viết một bài đăng Facebook giới thiệu túi vải chàm, giọng thân thiện, dưới 120 chữ.', created_at: `2026-11-${d}T01:00:12Z` },
+      { sender: 'assistant', text: `Bài ngày ${d}: Túi vải chàm nhuộm tay…`, created_at: `2026-11-${d}T01:00:40Z` },
+    ] })),
 ])));
 
 // ---- chạy app ----
@@ -155,10 +161,10 @@ await page.screenshot({ path: path.join(shots, '3-tasks.png') });
 // Nhập lịch sử claude.ai
 await page.click('.tab[data-view=history]');
 const imp = await page.evaluate((p) => window.desk.importExport(p), zipPath);
-check(imp.ok && imp.count === 1, 'Đọc file export .zip (bỏ hội thoại trống)');
+check(imp.ok && imp.count === 4, 'Đọc file export .zip (bỏ hội thoại trống)');
 await page.click('.tab[data-view=tasks]');
 await page.click('.tab[data-view=history]');
-await page.click('#histList li');
+await page.click('#histList li:has-text("Kế hoạch")');
 await page.waitForSelector('#histMessages .msg');
 check((await page.textContent('#histMessages')).includes('thứ 2, 4, 6'), 'Xem lại nội dung hội thoại cũ');
 await page.screenshot({ path: path.join(shots, '4-history.png') });
@@ -168,6 +174,26 @@ await page.press('#input', 'Enter');
 await page.waitForFunction(() => !document.querySelector('#sendBtn').disabled && document.querySelectorAll('#messages .msg').length === 2, null, { timeout: 15000 });
 const ctxReq = requests.filter((r) => r.body.stream).pop();
 check(ctxReq.body.messages[0].content.includes('Đăng 3 bài/tuần'), 'Chat mới mang ngữ cảnh từ lịch sử cũ');
+
+// Phát hiện automation và chạy lại
+await page.click('.tab[data-view=tasks]');
+await page.click('.tab[data-view=history]');
+await page.waitForSelector('#autoList li');
+const firstAuto = await page.textContent('#autoList li');
+check(firstAuto.includes('Chạy 3 lần'), 'Phát hiện task chạy lặp lại 3 lần');
+await page.click('#autoList li');
+await page.click('#autoAnalyze');
+await page.waitForSelector('#autoAnalysis .proposal', { timeout: 15000 });
+const anaReq = requests.filter((r) => r.body.output_config?.format).pop();
+check(anaReq && anaReq.body.output_config.format.type === 'json_schema' && anaReq.body.messages[0].content.includes('Thời điểm các lần chạy'), 'Gửi Claude prompt cũ + thời điểm chạy, ép JSON schema');
+check((await page.inputValue('#autoAnalysis [data-f=cron]')) === '0 8 * * *', 'Đề xuất lịch cron từ lịch sử');
+await page.screenshot({ path: path.join(shots, '5-automation.png'), fullPage: true });
+await page.click('#autoAnalysis [data-act=run]');
+await page.waitForFunction(() => /Chạy xong|Lỗi/.test(document.querySelector('#autoAnalysis [data-msg]').textContent), null, { timeout: 15000 });
+check((await page.textContent('#autoAnalysis [data-msg]')).startsWith('Chạy xong'), 'Thêm task từ lịch sử và chạy lại ngay');
+await page.click('.tab[data-view=tasks]');
+check((await page.locator('#taskList li').count()) === 2, 'Task mới xuất hiện trong Task tự động');
+await page.screenshot({ path: path.join(shots, '6-tasks-after.png') });
 
 // Dữ liệu còn sau khi mở lại
 await app.close();

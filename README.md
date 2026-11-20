@@ -10,6 +10,7 @@ App desktop (Windows / macOS / Linux) để chat với Claude và chạy task t�
   - **Webhook**: POST JSON tới Google Apps Script (ghi vào Google Sheets), Make / Zapier / n8n (đăng Facebook, Instagram…) hoặc API riêng.
   - Định dạng **JSON** dùng cho nhập liệu: Claude trả về JSON, app tách sẵn vào trường `data` của webhook.
 - **Lịch sử claude.ai:** nhập file export (Settings → Privacy → Export data) để xem lại chat cũ và tiếp tục chat với nội dung đó làm ngữ cảnh.
+- **Chạy lại automation cũ:** app tìm các task theo lịch trong lịch sử, dựa vào những hội thoại có cùng tin nhắn đầu và lặp lại nhiều lần. Claude đọc prompt cũ, thời điểm các lần chạy và kết quả gần nhất, rồi đề xuất task mới gồm tên, lịch cron và prompt viết lại. Bạn sửa nếu cần, rồi bấm *Thêm task* hoặc *Thêm và chạy ngay*. Task cũ nào cần connector (Gmail, Upwork, Drive…) sẽ được ghi rõ là còn thiếu gì.
 - **Chạy nền:** đóng cửa sổ thì app thu xuống khay hệ thống và task vẫn chạy. Có tuỳ chọn tự mở cùng máy.
 - **Bảo mật:** API key và token Telegram được mã hoá bằng kho khoá của hệ điều hành (DPAPI trên Windows, Keychain trên macOS). Không có gì gửi đi ngoài `api.anthropic.com`, Telegram và webhook bạn tự nhập.
 
@@ -33,7 +34,8 @@ npm run dist:win     # tạo .zip cho Windows
 
 1. Lấy API key ở **platform.claude.com → API keys**, nạp credit, rồi dán key vào **Cài đặt → Lưu key**. App sẽ tự kiểm tra key.
 2. (Tuỳ chọn) Telegram: nhắn `/newbot` cho **@BotFather** để lấy token và dán vào Cài đặt. Nhắn `/start` cho bot vừa tạo, bấm **Tự tìm chat ID**, rồi **Gửi thử**.
-3. Vào **Task tự động → + Task mới**, nhập tên, lịch, prompt và nơi nhận kết quả. Bấm **Chạy ngay** để thử.
+3. Muốn chạy lại automation cũ: vào **Lịch sử claude.ai → Nhập file export…**, chọn một mục trong *Automation phát hiện*, rồi bấm **Phân tích bằng Claude và tạo task**.
+4. Hoặc tự tạo: vào **Task tự động → + Task mới**, nhập tên, lịch, prompt và nơi nhận kết quả. Bấm **Chạy ngay** để thử.
 
 ### Cú pháp lịch (cron)
 
@@ -77,7 +79,7 @@ Cho task viết bài, rồi gửi webhook tới một kịch bản Make / Zapier
 npm test     # trên Linux không có màn hình: xvfb-run -a npm test
 ```
 
-Bài kiểm tra chạy app Electron thật với một máy chủ Claude API giả lập. Nó kiểm tra: lưu và kiểm tra key, chat stream, giữ lịch sử, task chạy tay, webhook nhận JSON, đọc file export `.zip`, chat tiếp với ngữ cảnh cũ, dữ liệu còn sau khi mở lại app, và không có lỗi console. Cần Playwright, cài sẵn hoặc chạy `npm i -D playwright`.
+Bài kiểm tra chạy app Electron thật với một máy chủ Claude API giả lập. Nó kiểm tra: lưu và kiểm tra key, chat stream, giữ lịch sử, task chạy tay, webhook nhận JSON, đọc file export `.zip`, chat tiếp với ngữ cảnh cũ, phát hiện automation và chạy lại, dữ liệu còn sau khi mở lại app, và không có lỗi console. Cần Playwright, cài sẵn hoặc chạy `npm i -D playwright`.
 
 ## Cấu trúc
 
@@ -86,7 +88,8 @@ src/main.js        tiến trình chính: cửa sổ, khay, IPC
 src/claude.js      gọi Claude API (streaming, fallback khi bị từ chối)
 src/scheduler.js   chạy task theo cron
 src/outputs.js     Telegram, webhook, tách JSON
-src/importer.js    đọc file export claude.ai (.zip / .json)
+src/importer.js    đọc file export claude.ai (.zip / .json), phát hiện automation
+src/automation.js  Claude phân tích automation cũ → đề xuất task (structured outputs)
 src/store.js       lưu dữ liệu JSON + mã hoá bí mật
 src/renderer/      giao diện
 test/smoke.mjs     kiểm tra end-to-end

@@ -94,4 +94,71 @@ function asContext(conv, maxChars = 60000) {
   return out;
 }
 
-module.exports = { importFile, normalize, asContext, readFromZip };
+const SCHEDULE_HINT = /(mỗi ngày|hằng ngày|hàng ngày|mỗi sáng|mỗi tối|mỗi tuần|hằng tuần|mỗi giờ|tiếng một lần|theo lịch|tự động|lên lịch|cron|schedul|every (day|morning|hour|week)|daily|weekly|automation|đăng bài|nhập liệu)/i;
+
+function firstUser(conv) {
+  const m = conv.messages.find((x) => x.role === 'user');
+  return m ? m.text : '';
+}
+
+const keyOf = (text) => text.replace(/\s+/g, ' ').trim().slice(0, 2000).toLowerCase();
+
+/**
+ * Tìm automation trong lịch sử: task theo lịch trên claude.ai tạo ra nhiều
+ * hội thoại có cùng tin nhắn đầu. Nhóm các hội thoại trùng tin nhắn đầu (>= 2 lần).
+ * Hội thoại lẻ nhắc tới lịch / tự động được đánh dấu "gợi ý".
+ */
+function detectAutomations(list) {
+  const groups = new Map();
+  for (const c of list) {
+    const text = firstUser(c);
+    if (text.length < 20) continue;
+    const k = keyOf(text);
+    if (!groups.has(k)) groups.set(k, { prompt: text, convs: [] });
+    groups.get(k).convs.push(c);
+  }
+  const repeated = [];
+  const repeatedIds = new Set();
+  for (const [k, g] of groups) {
+    if (g.convs.length < 2) continue;
+    const convs = [...g.convs].sort((a, b) => String(b.createdAt || b.updatedAt).localeCompare(String(a.createdAt || a.updatedAt)));
+    convs.forEach((c) => repeatedIds.add(c.id));
+    repeated.push({
+      id: 'grp-' + require('crypto').createHash('sha1').update(k).digest('hex').slice(0, 12),
+      kind: 'repeated',
+      title: convs[0].title,
+      prompt: g.prompt,
+      count: convs.length,
+      runs: convs.map((c) => c.createdAt || c.updatedAt).filter(Boolean),
+      conversationIds: convs.map((c) => c.id),
+    });
+  }
+  repeated.sort((a, b) => b.count - a.count);
+  const hinted = list
+    .filter((c) => !repeatedIds.has(c.id) && c.messages.some((m) => m.role === 'user' && SCHEDULE_HINT.test(m.text)))
+    .map((c) => ({ id: 'conv-' + c.id, kind: 'hint', title: c.title, prompt: firstUser(c), count: 1, runs: [c.createdAt || c.updatedAt], conversationIds: [c.id] }));
+  return [...repeated, ...hinted];
+}
+
+/** Dựng nội dung gửi Claude để phân tích một automation / hội thoại. */
+function automationBrief(auto, convs, tz) {
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    return isNaN(d) ? iso : `${iso} (giờ máy: ${d.toLocaleString('vi-VN', { timeZone: tz })}, ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()]})`;
+  };
+  let out = '';
+  if (auto.kind === 'repeated') {
+    out += `Phát hiện ${auto.count} hội thoại có cùng tin nhắn đầu tiên. Đây nhiều khả năng là một task chạy theo lịch trên claude.ai.\n\n`;
+    out += `Thời điểm các lần chạy (mới nhất trước):\n${auto.runs.slice(0, 40).map(fmt).join('\n')}\n\n`;
+    out += `PROMPT CỦA TASK:\n<<<\n${auto.prompt.slice(0, 20000)}\n>>>\n\n`;
+    convs.slice(0, 3).forEach((c, i) => {
+      const reply = c.messages.filter((m) => m.role === 'assistant').map((m) => m.text).join('\n').slice(0, 3000);
+      out += `KẾT QUẢ LẦN CHẠY ${i + 1} (${c.createdAt || c.updatedAt}):\n<<<\n${reply || '(trống)'}\n>>>\n\n`;
+    });
+  } else {
+    out += asContext(convs[0], 50000);
+  }
+  return out.slice(0, 80000);
+}
+
+module.exports = { importFile, normalize, asContext, readFromZip, detectAutomations, automationBrief };

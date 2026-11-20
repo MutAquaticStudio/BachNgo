@@ -108,15 +108,32 @@
     <aside class="list">
       <button class="primary block" id="importBtn">Nhập file export…</button>
       <input class="search" id="histSearch" placeholder="Tìm trong lịch sử…">
+      <div class="section-label" id="autoLabel" hidden>Automation phát hiện</div>
+      <ul id="autoList" class="auto-list"></ul>
+      <div class="section-label">Tất cả hội thoại</div>
       <ul id="histList"></ul>
     </aside>
     <div class="pane">
       <div id="histDetail" hidden>
         <header class="chat-head">
           <h2 id="histTitle"></h2>
+          <button class="ghost" id="histFindAuto">Tìm automation trong chat này</button>
           <button class="primary" id="histContinue">Tiếp tục chat với ngữ cảnh này</button>
         </header>
+        <div id="histAnalysis"></div>
         <div class="messages" id="histMessages"></div>
+      </div>
+      <div id="autoDetail" class="form" hidden>
+        <h2 id="autoTitle"></h2>
+        <p class="muted" id="autoMeta"></p>
+        <label>Prompt của automation cũ<textarea id="autoPrompt" rows="8" readonly></textarea></label>
+        <details><summary>Thời điểm các lần chạy</summary><ul class="muted" id="autoRuns"></ul></details>
+        <div class="form-actions">
+          <button class="primary" id="autoAnalyze">Phân tích bằng Claude và tạo task</button>
+          <button class="ghost" id="autoRaw">Tạo task giữ nguyên prompt</button>
+          <span class="muted" id="autoMsg"></span>
+        </div>
+        <div id="autoAnalysis"></div>
       </div>
       <div class="empty" id="histEmpty">
         <h3>Lịch sử chat từ claude.ai</h3>
@@ -126,6 +143,7 @@
           <li>Bấm <b>Nhập file export…</b> và chọn file <code>.zip</code> (hoặc <code>conversations.json</code>).</li>
         </ol>
         <p class="muted">Dữ liệu chỉ lưu trên máy này. Chọn một hội thoại để xem lại hoặc tiếp tục chat với nội dung đó.</p>
+        <p class="muted">Task theo lịch trên claude.ai để lại nhiều hội thoại có cùng tin nhắn đầu. App gom chúng vào mục <b>Automation phát hiện</b>. Từ đó Claude đọc lại và tạo task tương ứng để chạy tiếp ở đây.</p>
         <button class="ghost" id="histClear">Xoá lịch sử đã nhập</button>
       </div>
     </div>

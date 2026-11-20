@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('desk', {
   importExport: invoke('import:pick'),
   continueImported: invoke('import:continue'),
   clearImported: invoke('import:clear'),
+  listAutomations: invoke('auto:list'),
+  analyzeAutomation: invoke('auto:analyze'),
 
   on(channel, fn) {
     const allowed = ['chat:delta', 'chat:done', 'task:event'];

@@ -1,7 +1,7 @@
 {
   "name": "claude-desk",
   "productName": "Claude Desk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "App desktop chat với Claude bằng API key, chạy task tự động theo lịch",
   "main": "src/main.js",
   "private": true,

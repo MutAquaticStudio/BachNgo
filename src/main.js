@@ -6,7 +6,8 @@ const { Store } = require('./store');
 const { ask, testKey, friendlyError, MODELS } = require('./claude');
 const { Scheduler, validateCron } = require('./scheduler');
 const { sendTelegram, findTelegramChatId } = require('./outputs');
-const { importFile, asContext } = require('./importer');
+const { importFile, asContext, detectAutomations, automationBrief } = require('./importer');
+const { analyzeAutomation } = require('./automation');
 
 // Cho phép test tự động chạy với thư mục dữ liệu riêng.
 if (process.env.CLAUDE_DESK_DATA) app.setPath('userData', process.env.CLAUDE_DESK_DATA);
@@ -252,6 +253,32 @@ function registerIpc() {
     const conv = store.imported().find((c) => c.id === id);
     if (!conv) throw new Error('Không tìm thấy hội thoại.');
     return { context: asContext(conv), title: conv.title, messages: conv.messages };
+  });
+
+  // ---- automation trong lịch sử ----
+  ipcMain.handle('auto:list', () => detectAutomations(store.imported()));
+
+  ipcMain.handle('auto:analyze', async (_e, autoId) => {
+    const list = store.imported();
+    const auto = detectAutomations(list).find((a) => a.id === autoId)
+      || (autoId.startsWith('conv-') && list.some((c) => 'conv-' + c.id === autoId)
+        ? { id: autoId, kind: 'hint', conversationIds: [autoId.slice(5)] }
+        : null);
+    if (!auto) return { ok: false, error: 'Không tìm thấy automation.' };
+    const byId = new Map(list.map((c) => [c.id, c]));
+    const convs = auto.conversationIds.map((id) => byId.get(id)).filter(Boolean);
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const result = await analyzeAutomation({
+        apiKey: store.getSecret('anthropicKey'),
+        model: store.settings().model,
+        brief: automationBrief(auto, convs, tz),
+      });
+      result.tasks = result.tasks.map((t) => ({ ...t, cron: t.cron && validateCron(t.cron) ? t.cron : '', cronInvalid: Boolean(t.cron && !validateCron(t.cron)) }));
+      return { ok: true, ...result };
+    } catch (err) {
+      return { ok: false, error: friendlyError(err) };
+    }
   });
 
   ipcMain.handle('import:clear', () => {

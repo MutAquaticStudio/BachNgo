@@ -39,9 +39,10 @@ function friendlyError(err) {
  * @param {{role:'user'|'assistant', content:string}[]} o.messages
  * @param {(delta:string)=>void} [o.onText]
  * @param {AbortSignal} [o.signal]
+ * @param {object} [o.jsonSchema] ép câu trả lời theo JSON schema (structured outputs)
  * @returns {Promise<{text:string, stopReason:string, usage:object}>}
  */
-async function ask({ apiKey, model, effort, system, messages, onText, signal }) {
+async function ask({ apiKey, model, effort, system, messages, onText, signal, jsonSchema }) {
   const params = {
     model,
     max_tokens: 64000,
@@ -49,6 +50,7 @@ async function ask({ apiKey, model, effort, system, messages, onText, signal }) 
     output_config: { effort: effort || 'medium' },
     messages,
   };
+  if (jsonSchema) params.output_config.format = { type: 'json_schema', schema: jsonSchema };
   if (system) params.system = system;
   if (FALLBACK_MODELS.has(model)) {
     params.betas = ['server-side-fallback-2026-07-01'];
