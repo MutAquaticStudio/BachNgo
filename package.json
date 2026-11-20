@@ -1,0 +1,36 @@
+{
+  "name": "claude-desk",
+  "productName": "Claude Desk",
+  "version": "0.1.0",
+  "description": "App desktop chat với Claude bằng API key, chạy task tự động theo lịch",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/smoke.mjs",
+    "dist:win": "electron-builder --win zip --x64",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "build": {
+    "appId": "studio.mutaquatic.claudedesk",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.11.0",
+    "node-cron": "^4.6.0"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  }
+}

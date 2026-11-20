@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Desk</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="rail">
+    <div class="brand">Claude<span>Desk</span></div>
+    <button class="tab active" data-view="chat">Chat</button>
+    <button class="tab" data-view="tasks">Task tự động</button>
+    <button class="tab" data-view="history">Lịch sử claude.ai</button>
+    <button class="tab" data-view="settings">Cài đặt</button>
+    <div class="rail-foot" id="keyStatus"></div>
+  </nav>
+
+  <!-- CHAT -->
+  <section class="view active" id="view-chat">
+    <aside class="list">
+      <button class="primary block" id="newChat">+ Chat mới</button>
+      <input class="search" id="chatSearch" placeholder="Tìm trong chat…">
+      <ul id="chatList"></ul>
+    </aside>
+    <div class="chat">
+      <header class="chat-head">
+        <h2 id="chatTitle">Chat mới</h2>
+        <span class="muted" id="chatMeta"></span>
+        <button class="ghost" id="deleteChat" hidden>Xoá chat</button>
+      </header>
+      <div class="context-note" id="contextNote" hidden></div>
+      <div class="messages" id="messages">
+        <div class="empty" id="emptyChat">
+          <h3>Bắt đầu chat với Claude</h3>
+          <p>Lịch sử chat được lưu trên máy này. Key API của bạn được mã hoá.</p>
+        </div>
+      </div>
+      <form class="composer" id="composer">
+        <textarea id="input" rows="3" placeholder="Nhập tin nhắn… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+        <div class="composer-actions">
+          <button type="button" class="ghost" id="stopBtn" hidden>Dừng</button>
+          <button type="submit" class="primary" id="sendBtn">Gửi</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- TASKS -->
+  <section class="view" id="view-tasks">
+    <aside class="list">
+      <button class="primary block" id="newTask">+ Task mới</button>
+      <ul id="taskList"></ul>
+    </aside>
+    <div class="pane">
+      <form id="taskForm" class="form" hidden>
+        <h2 id="taskFormTitle">Task mới</h2>
+        <label>Tên task<input name="name" required placeholder="VD: Đăng bài Facebook buổi sáng"></label>
+        <div class="row">
+          <label>Lịch chạy (cron)
+            <input name="cron" placeholder="0 8 * * *">
+            <small class="muted" id="cronHint">Phút Giờ Ngày Tháng Thứ. VD: <code>0 8 * * *</code> = 8:00 mỗi ngày; <code>0 */2 * * *</code> = 2 tiếng một lần; để trống = chỉ chạy tay.</small>
+          </label>
+          <label class="check"><input type="checkbox" name="enabled" checked> Bật lịch</label>
+        </div>
+        <label>Yêu cầu gửi Claude (prompt)
+          <textarea name="prompt" rows="8" required placeholder="VD: Viết một bài đăng Facebook ngắn giới thiệu sản phẩm… Hôm nay là {{date}}. Bài lần trước: {{last}} — đừng lặp lại."></textarea>
+          <small class="muted">Biến có sẵn: <code>{{date}}</code> ngày, <code>{{time}}</code> giờ, <code>{{last}}</code> kết quả lần chạy trước.</small>
+        </label>
+        <div class="row">
+          <label>Định dạng kết quả
+            <select name="format">
+              <option value="text">Văn bản</option>
+              <option value="json">JSON (cho nhập liệu)</option>
+            </select>
+          </label>
+          <label>Model
+            <select name="model" id="taskModel"></select>
+          </label>
+        </div>
+        <fieldset>
+          <legend>Gửi kết quả tới</legend>
+          <label class="check"><input type="checkbox" name="telegram"> Telegram</label>
+          <label>Webhook URL (Google Apps Script, Make, Zapier, n8n…)
+            <input name="webhookUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+          </label>
+        </fieldset>
+        <div class="form-actions">
+          <button type="submit" class="primary">Lưu</button>
+          <button type="button" class="ghost" id="runTask">Chạy ngay</button>
+          <button type="button" class="danger" id="deleteTask">Xoá task</button>
+          <span class="muted" id="taskMsg"></span>
+        </div>
+        <h3>Lần chạy gần đây</h3>
+        <ul class="runs" id="runList"></ul>
+      </form>
+      <div class="empty" id="taskEmpty">
+        <h3>Task tự động</h3>
+        <p>Mỗi task gửi một yêu cầu cho Claude theo lịch, rồi gửi kết quả qua Telegram hoặc webhook. Từ webhook có thể ghi vào Google Sheets hoặc đăng lên mạng xã hội.</p>
+        <p>Task chỉ chạy khi app đang mở (kể cả khi đã thu nhỏ xuống khay hệ thống).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="view" id="view-history">
+    <aside class="list">
+      <button class="primary block" id="importBtn">Nhập file export…</button>
+      <input class="search" id="histSearch" placeholder="Tìm trong lịch sử…">
+      <ul id="histList"></ul>
+    </aside>
+    <div class="pane">
+      <div id="histDetail" hidden>
+        <header class="chat-head">
+          <h2 id="histTitle"></h2>
+          <button class="primary" id="histContinue">Tiếp tục chat với ngữ cảnh này</button>
+        </header>
+        <div class="messages" id="histMessages"></div>
+      </div>
+      <div class="empty" id="histEmpty">
+        <h3>Lịch sử chat từ claude.ai</h3>
+        <ol>
+          <li>Mở claude.ai ở tài khoản cũ → Settings → Privacy → <b>Export data</b>.</li>
+          <li>Tải file <code>.zip</code> trong email Claude gửi về.</li>
+          <li>Bấm <b>Nhập file export…</b> và chọn file <code>.zip</code> (hoặc <code>conversations.json</code>).</li>
+        </ol>
+        <p class="muted">Dữ liệu chỉ lưu trên máy này. Chọn một hội thoại để xem lại hoặc tiếp tục chat với nội dung đó.</p>
+        <button class="ghost" id="histClear">Xoá lịch sử đã nhập</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="view-settings">
+    <div class="pane">
+      <form class="form" id="settingsForm">
+        <h2>Cài đặt</h2>
+        <fieldset>
+          <legend>Claude API</legend>
+          <label>API key (lấy ở platform.claude.com → API keys)
+            <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
+          </label>
+          <div class="form-actions">
+            <button type="button" class="primary" id="saveKey">Lưu key</button>
+            <button type="button" class="ghost" id="testKey">Kiểm tra key</button>
+            <span class="muted" id="keyMsg"></span>
+          </div>
+          <div class="row">
+            <label>Model mặc định<select name="model" id="modelSel"></select></label>
+            <label>Mức suy nghĩ (effort)
+              <select name="effort">
+                <option value="low">Thấp – nhanh, rẻ</option>
+                <option value="medium">Vừa (mặc định)</option>
+                <option value="high">Cao</option>
+                <option value="xhigh">Rất cao</option>
+              </select>
+            </label>
+          </div>
+          <label>Hướng dẫn chung cho Claude (system prompt)
+            <textarea name="system" rows="4"></textarea>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Telegram</legend>
+          <label>Token bot (tạo bằng @BotFather trên Telegram)
+            <input type="password" id="tgToken" autocomplete="off" placeholder="123456:ABC…">
+          </label>
+          <label>Chat ID<input name="telegramChatId" placeholder="Nhắn /start cho bot rồi bấm “Tự tìm”"></label>
+          <div class="form-actions">
+            <button type="button" class="ghost" id="saveTg">Lưu token</button>
+            <button type="button" class="ghost" id="findTg">Tự tìm chat ID</button>
+            <button type="button" class="ghost" id="testTg">Gửi thử</button>
+            <span class="muted" id="tgMsg"></span>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Hệ thống</legend>
+          <label class="check"><input type="checkbox" name="autoStart"> Tự mở cùng máy (chạy ẩn ở khay)</label>
+          <p class="muted" id="sysInfo"></p>
+        </fieldset>
+        <div class="form-actions">
+          <button type="submit" class="primary">Lưu cài đặt</button>
+          <span class="muted" id="settingsMsg"></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
